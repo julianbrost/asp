@@ -25,23 +25,27 @@ Options:
   -h                       Show this help
   -V                       Show package version
 
-Commands:
-  checkout     NAME...     Create a mutable git repository for packages
-  difflog      NAME        Show revision history with diffs
-  export       NAME...     Export packages
-  gc                       Cleanup and optimize the local repository
-  disk-usage               Show amount of disk used by locally tracked packages
-  help                     Show this help
-  list-all                 List all known packages
-  list-arches  NAME...     List architectures for packages
-  list-local               List tracked packages
-  list-repos   NAME...     List repos for packages
-  ls-files     NAME        List files for package
-  log          NAME        Show revision history
-  shortlog     NAME        Show revision history in short form
-  show         NAME [FILE] Show the PKGBUILD or other FILE
-  update       [NAME...]   Update packages (update all tracked if none specified)
-  untrack      NAME...     Remove a package from the local repository
+Package Commands:
+  checkout           NAME...     Create a mutable git repository for packages
+  difflog            NAME        Show revision history with diffs
+  export             NAME...     Export packages
+  list-all                       List all known packages
+  list-arches        NAME...     List architectures for packages
+  list-local                     List tracked packages
+  list-repos         NAME...     List repos for packages
+  log                NAME        Show revision history
+  ls-files           NAME        List files for package
+  shortlog           NAME        Show revision history in short form
+  show               NAME [FILE] Show the PKGBUILD or other FILE
+  untrack            NAME...     Remove a package from the local repository
+  update             [NAME...]   Update packages (update all tracked if none specified)
+
+Meta Commands:
+  disk-usage                     Show amount of disk used by locally tracked packages
+  gc                             Cleanup and optimize the local repository
+  help                           Show this help
+  set-git-protocol   PROTO       Change git protocol (one of: git, http, https)
+
 EOF
 }
 
@@ -173,9 +177,9 @@ dump_packages() {
   for remote in "${ARCH_GIT_REPOS[@]}"; do
     "$dumpfn" "$remote" refspecs
     if [[ $refspecs ]]; then
-      printf '%s\n' "${refspecs[@]/#packages/"$remote"}"
+      printf '%s\n' "${refspecs[@]##*/}"
     fi
-  done
+  done | sort
 }
 
 list_local() {
@@ -298,51 +302,51 @@ action__ls-files() {
   package_list_files "$1"
 }
 
+action__set-git-protocol() {
+  __require_argc 1 $#
+
+  case $1 in
+    git|http|https)
+      ;;
+    *)
+      log_fatal 'invalid protocol: %s' "$1"
+      ;;
+  esac
+
+  for remote in "${ARCH_GIT_REPOS[@]}"; do
+    git remote set-url "$remote" "$1://git.archlinux.org/svntogit/$remote.git"
+  done
+}
+
 dispatch_action() {
-  local a candidates=()
-  local actions=(
-    checkout
-    difflog
-    disk-usage
-    export
-    gc
-    help
-    list-all
-    list-arches
-    list-local
-    list-repos
-    ls-files
-    log
-    shortlog
-    show
-    untrack
-    update
-  )
+  local candidates
 
   [[ $1 ]] || log_fatal 'no action specified (use -h for help)'
 
-  for a in "${actions[@]}"; do
-    if [[ $a = "$1" ]]; then
-      candidates=("$a")
-      break
-    fi
+  # exact match
+  if declare -F "action__$1" &>/dev/null; then
+    "action__$@"
+    return
+  fi
 
-    [[ $a = "$1"* ]] && candidates+=("$a")
-  done
-
+  # prefix match
+  mapfile -t candidates < <(compgen -A function "action__$1")
   case ${#candidates[*]} in
     0)
       log_fatal 'unknown action: %s' "$1"
       ;;
     1)
-      "action__${candidates[0]}" "${@:2}"
+      "${candidates[0]}" "${@:2}"
+      return
       ;;
     *)
       {
         printf "error: verb '%s' is ambiguous; possibilities:" "$1"
-        printf " '%s'" "${candidates[@]}"
+        printf " '%s'" "${candidates[@]#action__}"
         echo
       } >&2
+      return 1
+      ;;
   esac
 }
 

@@ -14,6 +14,7 @@ package_resolve() {
   fi
 
   log_error 'unknown package: %s' "$pkgname"
+  return 1
 }
 
 package_init() {
@@ -26,7 +27,7 @@ package_init() {
 
   pkgname=$1
 
-  package_resolve "$pkgname" "$2" || return 1
+  package_resolve "$pkgname" "$2" || return
 
   (( do_update )) || return 0
 
@@ -130,7 +131,7 @@ package_export() {
     IFS=/ read -r repo pkgname <<<"$pkgname"
   fi
 
-  package_init "$pkgname" remote || return 1
+  package_init "$pkgname" remote || return
 
   if [[ $repo ]]; then
     subtree=repos/$repo-$OPT_ARCH
@@ -150,25 +151,25 @@ package_export() {
 
   if (( ! OPT_FORCE )); then
     # shellcheck disable=SC2154
-    mkdir "$startdir/$pkgname" || return 1
+    mkdir "$startdir/$pkgname" || return
   fi
 
   log_info 'exporting %s:%s' "$pkgname" "$subtree"
   git archive --format=tar "remotes/$remote/packages/$pkgname" "$subtree/" |
-      bsdtar -C "$startdir" -s ",^$subtree/,$pkgname/," -xf - "$subtree/"
+      tar -C "$startdir" --transform "s,^$subtree,$pkgname," -xf - "$subtree/"
 }
 
 package_checkout() {
   local remote
   pkgname=$1
 
-  package_init "$pkgname" remote || return 1
+  package_init "$pkgname" remote || return
 
   git show-ref -q "refs/heads/$remote/packages/$pkgname" ||
       git branch -qf --no-track {,}"$remote/packages/$pkgname"
 
   quiet_git clone "$ASPROOT" --single-branch --branch "$remote/packages/$pkgname" \
-    "$startdir/$pkgname" || return 1
+    "$startdir/$pkgname" || return
 
   git --git-dir="$startdir/$pkgname/.git" config pull.rebase true
 }
@@ -180,7 +181,7 @@ package_get_repos_with_arch() {
   while read -r path; do
     IFS=/- read -r _ repo arch <<<"$path"
     printf '%s %s\n' "$repo" "$arch"
-  done < <(git ls-tree --name-only "$remote/packages/$pkgname" repos/)
+  done < <(git ls-tree --name-only "remotes/$remote/packages/$pkgname" repos/)
 }
 
 package_get_arches() {
@@ -188,7 +189,7 @@ package_get_arches() {
   declare -A arches
   pkgname=$1
 
-  package_init "$pkgname" remote || return 1
+  package_init "$pkgname" remote || return
 
   while read -r _ arch; do
     arches["$arch"]=1
@@ -202,7 +203,7 @@ package_get_repos() {
   declare -A repos
   pkgname=$1
 
-  package_init "$pkgname" remote || return 1
+  package_init "$pkgname" remote || return
 
   while read -r repo _; do
     repos["$repo"]=1
