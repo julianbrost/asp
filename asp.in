@@ -135,6 +135,16 @@ initialize() {
     log_fatal 'failed to create ASPCACHE (%s)' "$ASPCACHE"
   fi
 
+  # upgrade existing remotes to https:// urls if they use git://
+  if [[ -d .git ]]; then
+    for remote in "${ARCH_GIT_REPOS[@]}"; do
+      if git remote show -n "$remote" | grep -Fq "git://git.archlinux.org/svntogit/$remote.git"; then
+        log_warning "upgrading remote '$remote' to HTTPS"
+        git remote set-url "$remote" "https://git.archlinux.org/svntogit/$remote.git"
+      fi
+    done
+  fi
+
   [[ -f .asp ]] && return 0
 
   git init -q || return 1
